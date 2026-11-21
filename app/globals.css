@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  /* Surfaces: one near-black canvas, two raised steps. */
+  --color-background: #08090c;
+  --color-surface: #0d0f14;
+  --color-surface-raised: #12151c;
+  --color-surface-overlay: #171b24;
+
+  /* Hairlines and text. */
+  --color-border: #232834;
+  --color-border-strong: #303746;
+  --color-foreground: #eef1f7;
+  --color-muted: #99a2b3;
+  --color-muted-strong: #c4cbd8;
+
+  /* One accent, used for links, focus, and selection only. */
+  --color-primary: #8aa4ff;
+  --color-primary-strong: #a8bbff;
+  --color-primary-foreground: #0a0d15;
+
+  /* Status colours; low saturation so they stay secondary. */
+  --color-success: #5ad19b;
+  --color-warning: #e8b45a;
+  --color-danger: #f08282;
+  --color-info: #7cc7f0;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-primary) 32%, transparent);
+    color: var(--color-foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Quiet scrollbars: visible on hover, not a design element. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-strong);
+    border: 2px solid var(--color-background);
+    border-radius: 999px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

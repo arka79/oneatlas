@@ -1,0 +1,226 @@
+// OneAtlas data model.
+//
+// Concepts
+// - `Lab` is the organisation that develops a model (e.g. OpenAI).
+// - `Provider` is an inference host that serves models (e.g. Amazon Bedrock).
+// - `ModelProvider` is the availability join: one model can be listed by many
+//   providers, with optional provider-specific pricing and regional coverage.
+// - `Capability` is a normalised feature tag (tool use, prompt caching, …);
+//   `ModelCapability` joins it to models without repeating free-text features.
+//
+// Pricing units are deliberately explicit in every column name:
+// `inputPricePerMTokUsd` / `outputPricePerMTokUsd` mean **US dollars per
+// 1,000,000 tokens**. `outputPricePerMTokUsd` may be 0 for embedding models.
+// There is no per-image, per-request, or per-character pricing in this schema.
+//
+// Provenance: every model and benchmark result carries a `verificationStatus`,
+// a free-text `dataSource`, an optional `sourceUrl`, and `lastUpdated`.
+// The committed seed is entirely `ILLUSTRATIVE`; it is not vendor pricing or
+// published benchmark data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Modality {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  CODE
+}
+
+enum ModelType {
+  GENERAL
+  REASONING
+  CODING
+  MULTIMODAL
+  EMBEDDING
+}
+
+/// How much trust a record has earned. `ILLUSTRATIVE` means hand-entered demo
+/// data; `VERIFIED` would require a human to check the linked source.
+enum VerificationStatus {
+  ILLUSTRATIVE
+  UNVERIFIED
+  VERIFIED
+  STALE
+}
+
+model Lab {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  websiteUrl  String
+  country     String?
+  foundedYear Int?
+  models      Model[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
+model Provider {
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  name        String
+  description String
+  websiteUrl  String
+  regions     String[]
+  offerings   ModelProvider[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([name])
+  @@index([regions], type: Gin)
+}
+
+model Model {
+  id          String @id @default(cuid())
+  slug        String @unique
+  name        String
+  description String
+
+  labId String
+  lab   Lab    @relation(fields: [labId], references: [id], onDelete: Restrict)
+
+  /// High-level shape of the model. Detailed features live in ModelCapability.
+  modelType ModelType
+
+  releaseDate     DateTime @db.Date
+  contextWindow   Int
+  maxOutputTokens Int?
+  knowledgeCutoff String?
+
+  /// USD per 1,000,000 input tokens.
+  inputPricePerMTokUsd  Decimal @db.Decimal(10, 4)
+  /// USD per 1,000,000 output tokens. Zero is valid for embedding models.
+  outputPricePerMTokUsd Decimal @db.Decimal(10, 4)
+
+  modalities    Modality[]
+  isOpenWeights Boolean    @default(false)
+  license       String
+
+  dataSource         String
+  sourceUrl          String?
+  lastUpdated        DateTime
+  verificationStatus VerificationStatus @default(ILLUSTRATIVE)
+
+  offerings        ModelProvider[]
+  benchmarkResults BenchmarkResult[]
+  capabilities     ModelCapability[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([labId])
+  @@index([releaseDate])
+  @@index([modelType, releaseDate])
+  @@index([inputPricePerMTokUsd])
+  @@index([verificationStatus])
+  @@index([modalities], type: Gin)
+}
+
+/// A provider's availability listing for a model. Null price overrides mean
+/// "use the model's list price"; a set override is provider-specific.
+model ModelProvider {
+  modelId    String
+  model      Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  isAvailable      Boolean  @default(true)
+  availableRegions String[] @default([])
+  notes            String?
+
+  /// USD per 1,000,000 input tokens at this provider, if different from list.
+  inputPricePerMTokUsd  Decimal? @db.Decimal(10, 4)
+  /// USD per 1,000,000 output tokens at this provider, if different from list.
+  outputPricePerMTokUsd Decimal? @db.Decimal(10, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([modelId, providerId])
+  @@index([providerId, isAvailable])
+}
+
+model Capability {
+  id          String            @id @default(cuid())
+  slug        String            @unique
+  name        String
+  description String
+  category    String
+  models      ModelCapability[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([category])
+}
+
+model ModelCapability {
+  modelId      String
+  model        Model      @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  capabilityId String
+  capability   Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([modelId, capabilityId])
+  @@index([capabilityId])
+}
+
+model Benchmark {
+  id             String            @id @default(cuid())
+  slug           String            @unique
+  name           String
+  description    String
+  category       String
+  /// Display unit for scores, e.g. "%".
+  unit           String            @default("%")
+  higherIsBetter Boolean           @default(true)
+  version        String?
+  dataSource     String
+  sourceUrl      String?
+  lastUpdated    DateTime
+  results        BenchmarkResult[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([category])
+}
+
+/// One model's score on one benchmark. A model may appear at most once per
+/// benchmark; use benchmark `version` for revisions of the same eval.
+model BenchmarkResult {
+  id          String    @id @default(cuid())
+  modelId     String
+  model       Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  benchmarkId String
+  benchmark   Benchmark @relation(fields: [benchmarkId], references: [id], onDelete: Cascade)
+
+  score Float
+
+  dataSource         String
+  sourceUrl          String?
+  lastUpdated        DateTime
+  verificationStatus VerificationStatus @default(ILLUSTRATIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([modelId, benchmarkId])
+  @@index([benchmarkId, score(sort: Desc)])
+  @@index([modelId])
+  @@index([verificationStatus])
+}
