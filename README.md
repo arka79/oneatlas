@@ -1,66 +1,239 @@
 # OneAtlas
 
-AI model discovery and intelligence platform — a Full Stack Engineer internship MVP.
+AI model discovery and intelligence — a Full Stack Engineer internship MVP.
 
-OneAtlas lets you browse and filter AI models, compare them side by side, follow benchmark
-standings, explore the labs and inference providers behind the catalog, and estimate token
-costs. All catalog data is served from PostgreSQL through Prisma; nothing is hardcoded in the
-frontend.
+**OneAtlas • Freebuff / DeepSeek Prompt Playbook — Page 7**
 
-> **Data honesty:** the catalog ships with an **illustrative seed dataset** of 50 models, 12 labs,
-> 12 providers, 7 benchmarks, and 251 benchmark results. Model names reflect publicly announced
-> families, but prices, context windows, and benchmark scores are hand-entered approximations —
-> not live vendor data and not verified results. Every seeded model and result carries
-> `verificationStatus: ILLUSTRATIVE`, a `dataSource` note, an optional `sourceUrl` (null for the
-> committed seed), and `lastUpdated`; the UI labels it as such.
+OneAtlas lets you browse and filter AI models, compare them side by side, follow benchmark standings, explore the labs and inference providers behind the catalog, and estimate token costs. All catalog data is served from PostgreSQL through Prisma; nothing is hardcoded in the frontend.
+
+---
+
+## Problem
+
+Model pricing, context windows, capabilities, and benchmark scores are scattered across vendor websites, leaderboards, and inference providers. There is no single, honest place to:
+
+- Compare list pricing across models in a consistent unit (USD per 1M tokens)
+- See verified vs. illustrative provenance for every number
+- Compare two to four models on specs, benchmarks, capabilities, and estimated token cost in one view
+- Search labs and providers and follow links back to the models they build or serve
+
+OneAtlas solves this with a database-backed catalog where every figure carries a `verificationStatus`, `dataSource`, and `lastUpdated` — so nothing is presented as live vendor data unless it actually is.
+
+---
+
+## What OneAtlas is
+
+- A **Next.js 16 App Router** application (React Server Components)
+- A **PostgreSQL** catalog queried through **Prisma 6**
+- A **searchable, filterable, sortable, paginated** model catalog (`/models`)
+- A **model detail page** with lab info, provider availability, pricing, capabilities, and benchmark scores (`/models/[slug]`)
+- A **URL-backed comparison** of 2–4 models with best-value highlighting and a token-cost estimator (`/compare`)
+- A **benchmark leaderboard** that ranks models within a single evaluation at a time (`/leaderboard`)
+- **Searchable lab and provider directories** with linked profile pages (`/labs`, `/providers`)
+- A **JSON API** for every data surface (`/api/*`)
+- **Honest about data quality**: the shipped dataset is illustrative seed data, explicitly labeled as such
+
+## What OneAtlas is not
+
+- A live pricing engine — prices are illustrative approximations
+- A benchmark verification platform — scores carry `verificationStatus: ILLUSTRATIVE`
+- An authenticated or rate-limited platform — no accounts, no API keys required
+- A full-text search engine — `q` is case-insensitive substring matching
+- A production billing tool — the cost estimator is list-price math only
+
+---
+
+## Features
+
+| Area | Implemented |
+|------|-------------|
+| **Catalog discovery** | Search by name/lab/license/description; filter by lab, provider, type, capability, modality, open weights, max input price; sort by release date, name, price, or context; paginate at 9 per page |
+| **Model detail** | Full record: lab, pricing (input/output per 1M tokens), context window, max output, release date, knowledge cutoff, modalities, capabilities, provider availability and regions, benchmark scores, related models |
+| **Compare (2–4 models)** | URL-backed selection (`?ids=`), specification table with best-value badges, benchmark matrix with comparability caveats, capability/modality presence matrix, validated token-cost estimator |
+| **Leaderboard** | One benchmark at a time; best-first sorting per `higherIsBetter`; category filter; score bars only for `%` units; coverage and missing-result transparency |
+| **Labs directory** | Searchable, paginated; lab profiles link to model portfolios |
+| **Providers directory** | Searchable, paginated; provider profiles show availability, regions, listing-specific rates vs. list prices |
+| **JSON API** | `/api/health`, `/api/models`, `/api/models/[slug]`, `/api/capabilities`, `/api/providers`, `/api/providers/[slug]`, `/api/labs`, `/api/labs/[slug]`, `/api/leaderboard`, `POST /api/compare` |
+| **Data honesty** | Every model and result carries `verificationStatus`, `dataSource`, `sourceUrl`, `lastUpdated`, `isIllustrative`; seeded `sourceUrl` values are `null` (no fabricated citations) |
+| **Accessibility** | Skip-to-content link, `sr-only` labels, `aria-label`/`aria-describedby`, `focus-visible` rings, `aria-current` on nav, focus-trapped mobile drawer with Escape handling |
+
+---
+
+## Screenshots
+
+Capture these from your deployed instance for the README:
+
+| # | Suggested screenshot | Where to capture |
+|---|----------------------|------------------|
+| 1 | Dashboard with stat cards and price/context leaders | `https://oneatlas-five.vercel.app/` |
+| 2 | Model catalog with filters, sort, and pagination | `https://oneatlas-five.vercel.app/models` |
+| 3 | Model detail page with providers and benchmarks | `https://oneatlas-five.vercel.app/models/gpt-5` |
+| 4 | Compare page with best-value badges and cost estimator | `https://oneatlas-five.vercel.app/compare?ids=gpt-5,claude-opus-4-1` |
+| 5 | Leaderboard with score bars and coverage panel | `https://oneatlas-five.vercel.app/leaderboard` |
+| 6 | Labs directory | `https://oneatlas-five.vercel.app/labs` |
+| 7 | Providers directory | `https://oneatlas-five.vercel.app/providers` |
+| 8 | API health check JSON | `https://oneatlas-five.vercel.app/api/health` |
+
+Add them here:
+
+```markdown
+![Dashboard](docs/screenshots/dashboard.png)
+![Catalog](docs/screenshots/catalog.png)
+![Model detail](docs/screenshots/model-detail.png)
+![Compare](docs/screenshots/compare.png)
+![Leaderboard](docs/screenshots/leaderboard.png)
+![Labs](docs/screenshots/labs.png)
+![Providers](docs/screenshots/providers.png)
+```
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph Browser
+        UI[Next.js App Router UI]
+        MobileNav[Mobile drawer – focus trap, Escape]
+    end
+
+    subgraph App["Next.js 16 (App Router)"]
+        RSC[Server Components – /, /models, /models/[slug], /compare, /leaderboard, /labs, /providers]
+        RH[Route Handlers – /api/*]
+    end
+
+    subgraph Query["Query layer (lib/queries)"]
+        QM[models.ts]
+        QL[leaderboard.ts]
+        QLA[labs.ts]
+        QP[providers.ts]
+        QC[capabilities.ts]
+        QD[dashboard.ts]
+    end
+
+    subgraph Domain["Domain helpers (lib/)"]
+        Pricing[pricing.ts – token cost maths]
+        Compare[compare.ts – best-value & matrix helpers]
+        Format[format.ts – presentation formatting]
+        Serialize[serialize.ts – Decimal → number]
+    end
+
+    subgraph Validation["Validation (lib/schemas)"]
+        Zod[Zod schemas – shared by pages + API]
+    end
+
+    subgraph Persistence
+        Prisma[Prisma Client 6]
+        DB[(PostgreSQL 17)]
+    end
+
+    subgraph Seed
+        Seed[prisma/seed.ts – idempotent upsert]
+    end
+
+    UI --> RSC
+    MobileNav --> UI
+    RSC --> QM
+    RSC --> QL
+    RSC --> QLA
+    RSC --> QP
+    RH --> Zod
+    RH --> QM
+    QM --> Prisma
+    QL --> Prisma
+    QLA --> Prisma
+    QP --> Prisma
+    QC --> Prisma
+    QD --> Prisma
+    Pricing -.-> QM
+    Compare -.-> QM
+    Serialize --> QM
+    Prisma --> DB
+    Seed --> Prisma
+    Seed -.-> DB
+```
+
+**Data flow rules:**
+- Pages and API handlers share one query layer — they cannot drift apart on filtering or sorting.
+- No page imports Prisma directly; all DB access lives in `lib/queries/*`.
+- `lib/env.ts` validates `DATABASE_URL` at import time and fails with a readable message.
+- Database-backed pages use `export const dynamic = "force-dynamic"`; no static prerendering requires a live DB at build time.
+
+---
 
 ## Stack
 
 | Layer | Choice |
-|---|---|
+|-------|--------|
 | Framework | Next.js 16 (App Router, React Server Components) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS v4 |
-| Database | PostgreSQL 17 (Docker Compose) |
+| Database | PostgreSQL 17 |
 | ORM | Prisma 6.19 (`prisma.config.ts`) |
 | Validation | Zod |
-| Icons | Lucide |
-| UI tables / charts | Custom accessible tables and CSS score bars (no chart library) |
+| Icons | Lucide React |
+| Charts/tables | Custom accessible tables + CSS score bars (no chart library) |
+| Deployment | Vercel |
+| Database host | Neon (managed PostgreSQL) |
 
-## Prerequisites
+---
 
+## Schema overview
+
+```
+Lab 1 ───── n Model n ───── n BenchmarkResult n ───── 1 Benchmark
+             │
+             ├──── n ModelProvider n ───── 1 Provider
+             └──── n ModelCapability n ───── 1 Capability
+```
+
+| Entity | Purpose | Key constraints |
+|--------|---------|-----------------|
+| `Lab` | Research organisation that develops models | `slug` unique; delete restricted while models reference it |
+| `Provider` | Inference host or marketplace | `slug` unique; GIN index on `regions[]` |
+| `Model` | Catalogue record: type, pricing, context, modalities, licence, provenance | `slug` unique; indexes on `labId`, `releaseDate`, `modelType+releaseDate`, `inputPricePerMTokUsd`, GIN `modalities[]` |
+| `ModelProvider` | Availability join with optional provider-specific price overrides | Composite PK `(modelId, providerId)`; index `(providerId, isAvailable)`; cascades |
+| `Capability` / `ModelCapability` | Normalised feature tags joined to models | Composite PK; index on `capabilityId`; cascades |
+| `Benchmark` | Eval definition: category, unit, version, direction, provenance | `slug` unique; index on `category` |
+| `BenchmarkResult` | One model's score on one benchmark | Unique `(modelId, benchmarkId)`; index `(benchmarkId, score DESC)`; cascades |
+
+**Pricing units:** `inputPricePerMTokUsd` / `outputPricePerMTokUsd` mean **USD per 1,000,000 tokens**. Provider overrides use the same unit and are `null` when the provider uses the model list price. Embedding models may have an output price of 0.
+
+**Provenance:** every model and benchmark result carries `verificationStatus` (`ILLUSTRATIVE` \| `UNVERIFIED` \| `VERIFIED` \| `STALE`), `dataSource`, optional `sourceUrl`, and `lastUpdated`. Seeded `sourceUrl` values are `null` — no fabricated citations.
+
+---
+
+## API
+
+Full endpoint documentation, curl examples, response envelopes, and error codes live in [`docs/API.md`](docs/API.md).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/health` | Database readiness probe |
+| GET | `/api/models` | Search/filter/sort/paginate models |
+| GET | `/api/models/[slug]` | Model detail with lab, providers, capabilities, benchmarks |
+| GET | `/api/capabilities` | Capability definitions for filter controls |
+| GET | `/api/providers` | Provider directory with model counts |
+| GET | `/api/providers/[slug]` | Provider detail with served models and price overrides |
+| GET | `/api/labs` | Lab directory with model counts |
+| GET | `/api/labs/[slug]` | Lab detail with model portfolio |
+| GET | `/api/leaderboard` | Benchmark results filtered by benchmark/category |
+| POST | `/api/compare` | Compare 2–4 models in request order |
+
+Error codes: `INVALID_QUERY` (400), `INVALID_BODY` (400), `INVALID_JSON` (400), `INVALID_SLUG` (400), `MODEL_NOT_FOUND` (404), `PROVIDER_NOT_FOUND` (404), `LAB_NOT_FOUND` (404), `MODELS_NOT_FOUND` (404), `DATABASE_UNAVAILABLE` (503).
+
+---
+
+## Local setup
+
+### Prerequisites
 - Node.js 20.12+ (developed on 24)
-- Docker Desktop (or another Docker Engine with Compose v2)
+- Docker Desktop (or Docker Engine with Compose v2)
 
-## Data model
-
-The schema lives in `prisma/schema.prisma` and is configured for **Prisma 6.19** through
-`prisma.config.ts` (the Prisma 6 config file). Do not paste a Prisma 7 setup over it without
-following the Prisma 7 migration guide.
-
-| Entity | Purpose |
-|---|---|
-| `Lab` | Research organisation that develops models. Slug is unique; deleting a lab is restricted while models reference it. |
-| `Provider` | Inference host or marketplace. Slug is unique. |
-| `Model` | Catalogue record: `modelType`, description, release date, context window, max output, token pricing, modalities, licence, open-weights flag, and provenance. |
-| `ModelProvider` | Many-to-many availability join with optional provider-specific price overrides, regional coverage, notes, and `isAvailable`. |
-| `Capability` / `ModelCapability` | Normalised feature tags (tool use, prompt caching, extended thinking, …) joined to models. |
-| `Benchmark` | Eval definition with category, unit, version, score direction, and provenance. |
-| `BenchmarkResult` | One model's score on one benchmark (unique per model/benchmark) with provenance and verification status. |
-
-**Pricing units:** `inputPricePerMTokUsd` and `outputPricePerMTokUsd` mean **USD per 1,000,000
-tokens**. Provider overrides use the same unit. Embedding models may have an output price of 0;
-there is no per-image or per-request pricing in this schema.
-
-Every entity has `createdAt`/`updatedAt`. Indexes cover unique slugs, lab, release date, model
-type, input price, verification status, GIN arrays for modalities and provider regions, and
-benchmark leaderboard ordering. `ModelProvider` and the capability/result joins cascade on
-delete; `Model.lab` is restricted so a lab cannot be removed while its models exist.
-
-## Setup
+### Steps
 
 ```bash
-# 1. Install dependencies (runs `prisma generate`)
+# 1. Install dependencies (runs `prisma generate` via postinstall)
 npm install
 
 # 2. Create your local env file
@@ -69,7 +242,7 @@ cp .env.example .env
 # 3. Start PostgreSQL and wait for it to become healthy
 npm run db:up
 
-# 4. Create the schema (generates a migration on first run)
+# 4. Create the schema
 npm run db:migrate
 
 # 5. Load the illustrative catalog
@@ -81,228 +254,128 @@ npm run dev
 
 Open <http://localhost:3000>. `GET /api/health` reports database connectivity.
 
+### Environment variables
+
+`.env` is git-ignored. `.env.example` contains placeholder values only — never commit real credentials.
+
+```bash
+# Copy this file to `.env` and adjust values for your machine.
+# `.env` is git-ignored. Never commit real credentials.
+
+# --- PostgreSQL container (read by docker compose) ---
+POSTGRES_USER=oneatlas
+POSTGRES_PASSWORD=oneatlas_dev_password
+POSTGRES_DB=oneatlas
+POSTGRES_PORT=5432
+
+# --- Prisma connection string (read by the app and Prisma CLI) ---
+DATABASE_URL="postgresql://oneatlas:oneatlas_dev_password@localhost:5432/oneatlas?schema=public"
+
+# --- Direct (non-pooled) connection for Prisma migrations ---
+# Required in production when DATABASE_URL points to a pooled/serverless endpoint
+# (e.g. Neon pooler). Locally this equals DATABASE_URL.
+# DIRECT_URL="postgresql://oneatlas:oneatlas_dev_password@localhost:5432/oneatlas?schema=public"
+```
+
+| Variable | Read by | Required | Notes |
+|----------|---------|----------|-------|
+| `DATABASE_URL` | app + Prisma CLI | yes | Pooled/serverless connection in production; local Docker URL in development |
+| `DIRECT_URL` | Prisma CLI (migrations/seed) | production | Direct connection for advisory locks during `migrate deploy` |
+| `POSTGRES_*` | `docker-compose.yml` | local only | Container bootstrap values |
+
+---
+
 ## Database commands
 
 | Command | What it does |
-|---|---|
+|---------|--------------|
 | `npm run db:up` | Start PostgreSQL in the background and wait for its healthcheck |
-| `npm run db:down` | Stop the container (data is kept in the `oneatlas_pgdata` volume) |
+| `npm run db:down` | Stop the container (data kept in `oneatlas_pgdata` volume) |
 | `npm run db:logs` | Follow database logs |
-| `npm run db:reset` | **Destructive:** delete the volume and recreate an empty database |
-| `npm run db:migrate` | Create/apply Prisma migrations |
+| `npm run db:reset` | Destructive: delete the volume and recreate an empty database |
+| `npm run db:migrate` | Create/apply Prisma migrations (`migrate dev`) |
+| `npm run db:deploy` | Apply migrations in production (`migrate deploy`) |
 | `npm run db:seed` | Upsert the illustrative catalog (idempotent) |
 | `npm run db:studio` | Open Prisma Studio |
 
-### Creating and applying migrations
+Seed is repeatable: every record is upserted by unique slug, child rows are replaced, and records removed from the dataset are deleted. Re-running never creates duplicates.
 
-```bash
-npx prisma migrate dev --name describe_change   # create + apply in development
-npx prisma migrate deploy                       # apply committed migrations in CI/production
-npm run db:seed                                 # upsert the illustrative catalog
-```
-
-`prisma.config.ts` points Prisma at the schema and the seed command. The seed is repeatable: it
-upserts by slug, replaces child rows, and removes records no longer present in
-`prisma/seed-data.ts`.
-
-**If database credentials are unavailable**, migrations and seed cannot be applied. Start
-Postgres with `npm run db:up` (or point `DATABASE_URL` at an accessible PostgreSQL database),
-then run `npm run db:migrate` and `npm run db:seed`. A connection failure is not a successful
-migration — check `npx prisma migrate status` and `GET /api/health` before relying on the data.
-
-`DATABASE_URL` and the container's `POSTGRES_*` values live in `.env`, which is git-ignored.
-`.env.example` contains placeholders only; the committed values are local-development defaults,
-not secrets. Never commit a real `DATABASE_URL`.
-
-## API
-
-See [`docs/API.md`](docs/API.md) for the full contract, curl examples, and response envelopes.
-All endpoints read PostgreSQL through `lib/queries/*`:
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/models` | Search/filter/sort/paginate models by lab, provider, type, capability, modality, weights, and price |
-| GET | `/api/models/[slug]` | Model detail with lab, provider availability, capabilities, and benchmarks |
-| GET | `/api/capabilities` | Capability definitions used by the catalogue filter |
-| GET | `/api/providers`, `/api/providers/[slug]` | Provider directory and served models |
-| GET | `/api/labs`, `/api/labs/[slug]` | Lab directory and model portfolio |
-| GET | `/api/leaderboard` | Benchmark results filtered by benchmark/category |
-| POST | `/api/compare` | Compare 2–4 models in request order |
-
-With the dev server running, `npm run verify:api` exercises every endpoint and its error paths.
-
-## Compare workflow
-
-`/compare` puts two to four models side by side. The selection is stored in the URL as
-`?ids=slug-a,slug-b` — there is no account, cookie, or local-storage state. Invalid or duplicate
-slugs are ignored, and only the first four valid slugs are used.
-
-From discovery, tick the comparison checkboxes on `/models` and choose **Compare selected** (the
-explorer keeps `?compare=…` in the URL while you filter). From a model detail page, choose
-**Compare this model**, then add another with the picker. **Browse catalogue** on `/compare`
-returns to `/models` with the same selection pre-filled.
-
-The page shows model names, labs, and available providers; input and output list prices; context
-windows and max output; licence/weights and modalities; a capability presence matrix; and a
-benchmark matrix grouped by benchmark. "Lowest", "Largest", and "Top score" badges appear only
-when at least two selected models have a comparable value. Missing results are shown as `—` with
-caveats, and benchmark wins are never highlighted across different benchmarks.
-
-The token cost estimator accepts whole, non-negative input and output token counts (commas are
-allowed) and calculates `tokens ÷ 1,000,000 × price` per model. It highlights the cheapest total
-only when two or more list prices are usable, reports unavailable prices explicitly, and labels
-every figure as an estimate. It uses model list prices only; provider-specific overrides, caching
-and batch discounts, volume agreements, minimum charges, taxes, and other fees are excluded.
-
-### Try it manually
-
-1. Start PostgreSQL, migrate, seed, and run the dev server as described in [Setup](#setup).
-2. Open <http://localhost:3000/models>, tick two to four models, and choose **Compare selected**.
-3. Confirm the specification, benchmark, capability, and estimator sections render, and that
-   **Browse catalogue** preserves the selection.
-4. On `/compare`, add and remove models with the picker/chips. The URL should update each time and
-   a refresh should keep the selection. At four models the picker is disabled.
-5. Enter `1,000,000` input tokens and `500,000` output tokens, then **Calculate estimate**. For a
-   model priced at $1.25/1M input and $10/1M output, the estimate should be $6.25 (plus a
-   **Cheapest** badge on the lowest total).
-6. Check validation with a blank field, `1.5`, `-1`, and `abc`; each should show an inline error and
-   no results. `0` in both fields is rejected because it produces no meaningful workload.
-7. Check edge cases: `/compare` (picker plus empty state), `/compare?ids=gpt-5` (asks for one more
-   model), `/compare?ids=gpt-5,not-a-model` (warning lists the unknown slug), and a link with five
-   ids (first four are compared).
-
-## Leaderboard and ecosystem directories
-
-`/leaderboard` ranks models within **one benchmark at a time**. The page resolves a benchmark from
-the URL (`?benchmark=mmlu`), optionally narrowed by category (`?category=Coding`), and always sorts
-best-first using that benchmark's recorded `higherIsBetter` direction. A benchmark context panel
-shows its name, description, category, version, unit, direction, result coverage, and provenance.
-Model rows show rank, lab, type, context window, and score; percentage benchmarks also get a
-0–100% bar. Missing results are never treated as zero and are never filled with a synthetic score.
-There is no combined universal ranking across benchmarks.
-
-`/labs` and `/providers` are searchable, paginated directories backed by the real `Lab` and
-`Provider` tables. Search matches the same fields as the public API (lab name/description/country;
-provider name/description). Lab profiles at `/labs/[slug]` list that lab's models; provider
-profiles at `/providers/[slug]` use the `ModelProvider` join to show availability, regions, notes,
-and provider-specific rates alongside each model. Model, lab, and provider links connect the
-sections; model detail also links back to its lab and provider profiles.
-
-### Try it manually
-
-1. Open <http://localhost:3000/leaderboard>. Confirm the default benchmark has a context card, the
-   ranked rows are ordered best-first, percentage scores have bars, and pagination preserves the
-   benchmark.
-2. Change **Category** to `Coding` and apply; the benchmark list should narrow and the page should
-   select a benchmark with recorded results. Switch to `MMLU`, then page forward. Confirm the URL
-   contains the benchmark and page, and that every row is from that benchmark.
-3. Try `/leaderboard?benchmark=not-real` and `/leaderboard?category=not-real`; both should show a
-   visible warning and fall back to a valid benchmark. Confirm the context card shows how many
-   catalogue models have no recorded result — those models must not appear as zero scores.
-4. Open <http://localhost:3000/labs>, search `openai`, clear the search, and page to page 2. Open a
-   lab profile and confirm its model rows link to `/models/[slug]`. Try `/labs/not-a-lab`.
-5. Open <http://localhost:3000/providers>, search `groq`, and page through the directory. Open
-   `/providers/amazon-bedrock` and confirm the table shows availability, regions, and provider-rate
-   overrides alongside list prices. Try `/providers/not-a-provider`.
-6. On a model detail page, follow the lab name to its profile and the provider name to its provider
-   profile. Confirm the sidebar links to Leaderboard, Labs, and Providers all resolve.
+---
 
 ## Checks
 
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
-npm run test        # unit tests (tsx + node:test)
-npm run build       # production build (needs the database running)
-npm run verify:api  # HTTP smoke test; requires a running dev server
+npm run test        # unit tests (tsx + node:test) for lib/pricing.ts and lib/compare.ts
+npm run build       # production build (runs db:deploy first)
+npm run verify:api  # HTTP smoke test; requires a running dev server + seeded database
 ```
 
-## Deploy to Vercel (Neon PostgreSQL)
+---
 
-OneAtlas is a Next.js App Router app backed by PostgreSQL through Prisma. It has no
-local file or secret dependencies — all data comes from the database — so it deploys
-to Vercel as long as `DATABASE_URL` is reachable from the build/runtime environment.
+## Deployment to Vercel (Neon PostgreSQL)
+
+OneAtlas has no local file or secret dependencies — all data comes from PostgreSQL — so it deploys to Vercel as long as `DATABASE_URL` is reachable from the build/runtime environment.
 
 ### 1. Provision the database
 
 Create a managed PostgreSQL database (e.g. Neon). You will get two connection strings:
 
-- **Direct** — a plain `postgresql://` URL, used by Prisma for migrations/seed.
-- **Pooled / serverless** — a connection-string variant that Neon routes through its
-  connection pooler, used by the app at runtime in Vercel serverless functions.
+- **Direct** — plain `postgresql://` URL, used by Prisma for migrations/seed (advisory locks).
+- **Pooled / serverless** — connection-string variant routed through Neon's pooler, used by the app at runtime in Vercel serverless functions.
 
-Append `?sslmode=require` to either string if your provider does not enable TLS by default.
+Append `?sslmode=require` if your provider does not enable TLS by default.
 
-### 2. Connect the Git repo to Vercel
+### 2. Connect the repo to Vercel
 
-- Import the repository in Vercel.
-- Framework preset: Next.js (auto-detected; `vercel.json` pins the build command).
-- Build command: `npm run db:deploy && next build` (runs Prisma migrations, then builds).
-- Install command: `npm install` (runs `postinstall` → `prisma generate`).
+1. Import the repository in Vercel.
+2. Framework preset: Next.js (auto-detected; `vercel.json` pins the build command).
+3. Build command: `npm run db:deploy && next build` (migrations run, then the app builds).
+4. Install command: `npm install` (runs `postinstall` → `prisma generate`).
 
 ### 3. Add environment variables in Vercel
 
-In **Project Settings → Environment Variables**, add (Production, Preview, Development):
+In **Project Settings → Environment Variables**, add for Production, Preview, and Development:
 
 | Variable | Value | Required |
-|---|---|---|
+|----------|-------|----------|
 | `DATABASE_URL` | Pooled/serverless PostgreSQL connection string | Yes |
 | `DIRECT_URL` | Direct (non-pooled) PostgreSQL connection string | Yes (for migrations) |
 
-Do not commit these values. `.env` is git-ignored; only `.env.example` (placeholders) is tracked.
+Do not commit these values. `.env` is git-ignored; only `.env.example` is tracked.
 
-Prisma uses `DIRECT_URL` automatically for `prisma migrate deploy` when `DATABASE_URL`
-is a pooled connection, so migrations run safely on a single direct connection during build.
-
-### 4. Run the seed (one-time, after first deploy)
-
-The seed (`prisma/seed.ts`) is idempotent: every record is upserted by its unique slug,
-so re-running it never creates duplicates. After the first successful deployment, run:
+### 4. Seed production (one-time, after first deploy)
 
 ```bash
 npx prisma db seed
 ```
 
-You can run this from the Vercel CLI against your production database, or from any
-machine that can reach the production `DATABASE_URL`/`DIRECT_URL`. Re-running later is
-safe and will refresh the catalog to match `prisma/seed-data.ts`.
+Run from any machine that can reach the production `DATABASE_URL`/`DIRECT_URL`. Idempotent — safe to re-run.
 
 ### 5. Verify
 
-- `GET /api/health` should return `{ "status": "ok", "database": "connected" }`.
-- `GET /api/models` should return 50 models on the first page.
-- Open the production URL and confirm the dashboard, catalog, compare, leaderboard, labs,
-  and providers pages load.
+- `GET /api/health` → `{ "status": "ok", "database": "connected" }`
+- `GET /api/models` → 50 models on page 1
 
-### Troubleshooting
+---
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Build fails at `prisma migrate deploy` | `DATABASE_URL` is a pooled connection and Prisma needs a direct one | Set `DIRECT_URL` to the direct endpoint in Vercel |
-| `DATABASE_URL is required` at build | Env var not set in Vercel | Add `DATABASE_URL` (and `DIRECT_URL`) to project settings |
-| 503 on `/api/health` | Database unreachable from Vercel / wrong password | Verify the connection string and that Neon allows connections from Vercel IPs |
-| Migrations "already applied" errors | `prisma migrate deploy` re-run on a migrated DB | Expected — it is idempotent and no-ops when migrations are current |
-| Seed creates duplicates | Seed is not idempotent | It is idempotent by design; duplicates indicate an older seed version |
+## Data caveats
 
-## Project layout
+- **All seeded data is illustrative.** Model names reflect publicly announced families, but prices, context windows, release dates, and benchmark scores are hand-entered approximations — not live vendor pricing or published benchmark results.
+- **`verificationStatus: ILLUSTRATIVE`** on every seeded model and result.
+- **`sourceUrl` is `null`** for the committed seed — no fabricated research or vendor citations are presented as links.
+- **`dataSource`** carries a plain-text note: "Illustrative seed dataset — hand-entered approximations; not vendor pricing or published benchmark results."
+- **No ingestion pipeline or live sync exists.** Replace `prisma/seed-data.ts` with a real ingestion pipeline (and set `verificationStatus` honestly) before presenting any numbers as fact.
 
-```
-app/                 routes, layout, API handlers
-  api/health/        database readiness probe
-components/          reusable UI (layout/, catalog/, …)
-lib/                 db client, env validation, query layer, domain helpers
-prisma/              schema, migrations, seed script + illustrative dataset
-docs/                API contract, architecture, and context map
-```
+---
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
-[`docs/CONTEXT_MAP.md`](docs/CONTEXT_MAP.md) for entities, routes, and dependency relationships.
+## Limitations & future improvements
 
-## Milestones
-
-0. **Foundation** — scaffold, Docker Postgres, Prisma schema, seed, health check, docs ✅
-1. **Model catalogue** — discovery (search, filter, sort, pagination), model detail pages, `/api/models` and `/api/models/[slug]` ✅
-2. **Read API surface** — models, providers, labs, leaderboard, and compare endpoints over PostgreSQL ✅
-3. **Compare experience** — URL-backed selection from discovery and detail, best-value highlighting, benchmark comparability caveats, and an interactive token-cost estimator ✅
-4. **Leaderboard and ecosystem directories** — benchmark/category-filtered rankings with score bars and coverage caveats; searchable lab and provider directories with linked profile pages and model listings ✅
-5. Standalone `/calculator`, accessibility/responsive polish, live playground (stretch)
+- **No authentication or rate limiting.** Open read-only API.
+- **No full-text search.** `q` is case-insensitive substring matching; Postgres FTS would require a schema/migration change.
+- **No unit-test runner originally.** Unit tests for `lib/pricing.ts` and `lib/compare.ts` were added using `node:test` + `tsx`; expanding coverage is a follow-up.
+- **Standalone `/calculator`** is a `Coming Soon` placeholder (planned milestone); the compare page already includes a token-cost estimator.
+- **No live data ingestion.** Seeded data must be replaced with a verified pipeline before production procurement use.
+- **Serverless connection pooling.** On Vercel/Lambda-style hosts, use a pooled connection string (PgBouncer, Prisma Accelerate, or provider pooler) for `DATABASE_URL` and a direct connection for `DIRECT_URL`.
+- **No Prisma deploy script.** `prisma migrate deploy` is wired into `vercel.json` via `db:deploy`; no separate npm script wraps it yet.
