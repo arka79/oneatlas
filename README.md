@@ -92,65 +92,21 @@ Add them here:
 
 ```mermaid
 flowchart TD
-    subgraph Browser
-        UI[Next.js App Router UI]
-        MobileNav[Mobile drawer – focus trap, Escape]
-    end
+    Browser["Browser"]
+    App["Next.js 16 App Router"]
+    Query["Query layer lib/queries"]
+    Domain["Domain helpers lib/"]
+    Validation["Validation lib/schemas"]
+    Persistence["Persistence"]
+    Seed["Seed prisma/seed.ts"]
 
-    subgraph App["Next.js 16 (App Router)"]
-        RSC[Server Components – /, /models, /models/[slug], /compare, /leaderboard, /labs, /providers]
-        RH[Route Handlers – /api/*]
-    end
-
-    subgraph Query["Query layer (lib/queries)"]
-        QM[models.ts]
-        QL[leaderboard.ts]
-        QLA[labs.ts]
-        QP[providers.ts]
-        QC[capabilities.ts]
-        QD[dashboard.ts]
-    end
-
-    subgraph Domain["Domain helpers (lib/)"]
-        Pricing[pricing.ts – token cost maths]
-        Compare[compare.ts – best-value & matrix helpers]
-        Format[format.ts – presentation formatting]
-        Serialize[serialize.ts – Decimal → number]
-    end
-
-    subgraph Validation["Validation (lib/schemas)"]
-        Zod[Zod schemas – shared by pages + API]
-    end
-
-    subgraph Persistence
-        Prisma[Prisma Client 6]
-        DB[(PostgreSQL 17)]
-    end
-
-    subgraph Seed
-        Seed[prisma/seed.ts – idempotent upsert]
-    end
-
-    UI --> RSC
-    MobileNav --> UI
-    RSC --> QM
-    RSC --> QL
-    RSC --> QLA
-    RSC --> QP
-    RH --> Zod
-    RH --> QM
-    QM --> Prisma
-    QL --> Prisma
-    QLA --> Prisma
-    QP --> Prisma
-    QC --> Prisma
-    QD --> Prisma
-    Pricing -.-> QM
-    Compare -.-> QM
-    Serialize --> QM
-    Prisma --> DB
-    Seed --> Prisma
-    Seed -.-> DB
+    Browser --> App
+    App --> Query
+    Query --> Persistence
+    Domain -.-> Query
+    Validation --> Query
+    Persistence --> DB[(PostgreSQL 17)]
+    Seed --> Persistence
 ```
 
 **Data flow rules:**
